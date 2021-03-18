@@ -59,7 +59,7 @@ void *dine(void *num) {
     left_cs = (phil_id + (num_phils - 1)) % num_phils;
 
     phil_list[phil_id]->state = THINKING;
-    printf("Philosopher %d thinking\n", phil_id);
+    printf("Philosopher %d thinking\n", phil_id + 1);
     sleep(rand() % 5); //thinks for any amount time between 0-4 time units
 
     //repeat until philosopher has eaten max number of times
@@ -75,7 +75,7 @@ void *dine(void *num) {
 
         //philosopher is now eating
         phil_list[i]->state = EATING;
-        printf("Philosopher %d eating\n", phil_id);
+        printf("Philosopher %d eating\n", phil_id + 1);
         sleep(rand() % 5); //eats for any amount of time between 0-4 time units
 
         //letting go of chopsticks
@@ -84,7 +84,7 @@ void *dine(void *num) {
         pthread_mutex_unlock(&cs_list[left_cs]->mutex);
         cs_list[right_cs]->state = AVAILABLE;
         cs_list[left_cs]->state = AVAILABLE;
-        printf("Philosopher %d thinking\n", phil_id);
+        printf("Philosopher %d thinking\n", phil_id + 1);
         sleep(rand() % 5+i); //thinks for any amount time between 0-4 time units
     }
 }
