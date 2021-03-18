@@ -64,33 +64,28 @@ void *dine(void *num) {
 
     //repeat until philosopher has eaten max number of times
     for (int i = 0; i < num_eats; i++) {
+       while (cs_list[right_cs]->state == TAKEN && cs_list[left_cs]->state == TAKEN) {}
 
-        
-//        while (cs_list[right_cs]->state == TAKEN && cs_list[left_cs]->state == TAKEN) {}
+        //taking chopsticks
+        phil_list[i]->state = HUNGRY;
+        pthread_mutex_lock(&cs_list[right_cs]->mutex);
+        pthread_mutex_lock(&cs_list[left_cs]->mutex);
+        cs_list[right_cs]->state = TAKEN;
+        cs_list[left_cs]->state = TAKEN;
 
-//        if (phil_list[left_cs]->state != EATING && phil_list[right_cs]->state != EATING && phil_list[i]->state == HUNGRY) {
-            //taking chopsticks
-            phil_list[i]->state = HUNGRY;
-            pthread_mutex_lock(&cs_list[right_cs]->mutex);
-            pthread_mutex_lock(&cs_list[left_cs]->mutex);
-            cs_list[right_cs]->state = TAKEN;
-            cs_list[left_cs]->state = TAKEN;
+        //philosopher is now eating
+        phil_list[i]->state = EATING;
+        printf("Philosopher %d eating\n", phil_id);
+        sleep(rand() % 5); //eats for any amount of time between 0-4 time units
 
-            //philosopher is now eating
-            phil_list[i]->state = EATING;
-            printf("Philosopher %d eating\n", phil_id);
-            sleep(rand() % 5); //eats for any amount of time between 0-4 time units
-
-            //letting go of chopsticks
-            phil_list[i]->state = THINKING;
-            pthread_mutex_unlock(&cs_list[right_cs]->mutex);
-            pthread_mutex_unlock(&cs_list[left_cs]->mutex);
-            cs_list[right_cs]->state = AVAILABLE;
-            cs_list[left_cs]->state = AVAILABLE;
-            printf("Philosopher %d thinking\n", phil_id);
-            sleep(rand() % 5+i); //thinks for any amount time between 0-4 time units
-//        }
-
+        //letting go of chopsticks
+        phil_list[i]->state = THINKING;
+        pthread_mutex_unlock(&cs_list[right_cs]->mutex);
+        pthread_mutex_unlock(&cs_list[left_cs]->mutex);
+        cs_list[right_cs]->state = AVAILABLE;
+        cs_list[left_cs]->state = AVAILABLE;
+        printf("Philosopher %d thinking\n", phil_id);
+        sleep(rand() % 5+i); //thinks for any amount time between 0-4 time units
     }
 }
 
@@ -106,6 +101,12 @@ int main(int argc, char *argv[]) {
     num_phils = atoi(argv[1]);
     num_eats = atoi(argv[2]);
     int error;
+
+    //validating command-line arguments
+    if (num_phils <= 2 || num_eats < 1 || num_eats > 1000) {
+        printf("Invalid input.\nNeed more than 2 philosophers and between 1 and 1000 num eats for each.\n");
+        return -1;
+    }
 
     //initialize list of philosophers at dining table
     phil_list = malloc(num_phils * sizeof(phil *));
