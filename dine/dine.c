@@ -55,8 +55,10 @@ void *dine(void *num) {
     int right_cs, left_cs;
 
     //calculating IDs of right and left chopsticks
-    right_cs = (phil_id + 1) % num_phils;
-    left_cs = (phil_id + (num_phils - 1)) % num_phils;
+   right_cs = (phil_id + 1) % num_phils;
+   left_cs = (phil_id + (num_phils - 1)) % num_phils;
+    // right_cs = phil_id;
+    // left_cs = (phil_id + 1) % num_phils;
 
     phil_list[phil_id]->state = THINKING;
     printf("Philosopher %d thinking\n", phil_id + 1);
@@ -64,7 +66,7 @@ void *dine(void *num) {
 
     //repeat until philosopher has eaten max number of times
     for (int i = 0; i < num_eats; i++) {
-       while (cs_list[right_cs]->state == TAKEN && cs_list[left_cs]->state == TAKEN) {}
+       while (cs_list[right_cs]->state == TAKEN && cs_list[left_cs]->state == TAKEN) {} //wait
 
         //taking chopsticks
         phil_list[i]->state = HUNGRY;
