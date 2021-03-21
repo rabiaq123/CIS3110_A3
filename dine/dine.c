@@ -14,30 +14,15 @@
 
 /* DEFINITIONS */
 
-//three states of a philosopher
-typedef enum p_state {
-    THINKING,
-    HUNGRY,
-    EATING
-} p_state;
-
-//states of chopstick
-typedef enum c_state {
-    AVAILABLE,
-    TAKEN
-} c_state;
-
 //info related to philosopher
 typedef struct Philosopher {
 	int id;
-	p_state state;
 	pthread_t thread_id;
 } phil;
 
 //info related to chopstick
 typedef struct Chopstick {
 	int id;
-	c_state state;
 	pthread_mutex_t mutex;
 } chopstick;
 
@@ -55,39 +40,28 @@ void *dine(void *num) {
     int right_cs, left_cs;
 
     //calculating IDs of right and left chopsticks
-   right_cs = (phil_id + 1) % num_phils;
-   left_cs = (phil_id + (num_phils - 1)) % num_phils;
-    // right_cs = phil_id;
-    // left_cs = (phil_id + 1) % num_phils;
+    right_cs = (phil_id + 1) % num_phils;
+    left_cs = (phil_id + (num_phils - 1)) % num_phils;
 
-    phil_list[phil_id]->state = THINKING;
     printf("Philosopher %d thinking\n", phil_id + 1);
     sleep(rand() % 5); //thinks for any amount time between 0-4 time units
 
     //repeat until philosopher has eaten max number of times
     for (int i = 0; i < num_eats; i++) {
-       while (cs_list[right_cs]->state == TAKEN && cs_list[left_cs]->state == TAKEN) {} //wait
 
         //taking chopsticks
-        phil_list[i]->state = HUNGRY;
         pthread_mutex_lock(&cs_list[right_cs]->mutex);
         pthread_mutex_lock(&cs_list[left_cs]->mutex);
-        cs_list[right_cs]->state = TAKEN;
-        cs_list[left_cs]->state = TAKEN;
 
         //philosopher is now eating
-        phil_list[i]->state = EATING;
         printf("Philosopher %d eating\n", phil_id + 1);
         sleep(rand() % 5); //eats for any amount of time between 0-4 time units
 
         //letting go of chopsticks
-        phil_list[i]->state = THINKING;
         pthread_mutex_unlock(&cs_list[right_cs]->mutex);
         pthread_mutex_unlock(&cs_list[left_cs]->mutex);
-        cs_list[right_cs]->state = AVAILABLE;
-        cs_list[left_cs]->state = AVAILABLE;
         printf("Philosopher %d thinking\n", phil_id + 1);
-        sleep(rand() % 5+i); //thinks for any amount time between 0-4 time units
+        sleep(rand() % 5+i); //thinks for any amount time between (0-4)+i time units
     }
 }
 
@@ -115,7 +89,6 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < num_phils; i++) {
         phil_list[i] = malloc(sizeof(phil));
         phil_list[i]->id = i;
-        phil_list[i]->state = THINKING;
     }
 
     //initialize list of chopsticks at dining table
@@ -123,7 +96,6 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < num_phils; i++) {
         cs_list[i] = malloc(sizeof(chopstick));
         cs_list[i]->id = i;
-        cs_list[i]->state = AVAILABLE;
         pthread_mutex_init(&cs_list[i]->mutex, NULL);
     }
 
