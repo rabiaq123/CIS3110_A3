@@ -1,7 +1,6 @@
 #include <stdio.h>     /* Input/Output */
 #include <stdlib.h>    /* General Utilities */
 #include <string.h>
-#include <stdbool.h>
 #include <unistd.h>    /* Symbolic Constants */
 #include <sys/types.h> /* Primitive System Data Types */
 #include <sys/wait.h>  /* Wait for Process Termination */
@@ -23,7 +22,8 @@ typedef struct Process {
     struct Process *next;
 } Process;
 
-char memory[128] = {'\0'}; //empty
+char memory[128] = {'\0'}; //memory is initially empty
+int queue_len = 0; //length of Process list (queue)
 
 
 //parse file - parse each line (one process) to get the process ID and its size
@@ -32,9 +32,11 @@ char memory[128] = {'\0'}; //empty
     //if Process list has not been defined, create new list
 //have mem array be empty (use '-' or '\0' to denote) 
 //load one process at a time in the order they were given in the file into memory, store in array by id
-//if no space to store in memory, swap a process out until you have enough space
-    //note a process can be swapped out no more than 3 times (after that assume the process has been run to completion)
+    //remove the process from the Process list when the process is loaded into memory, as the list represents the queue
+//if no space to store in memory, swap a process out of memory until you have enough space
     //the first process to be swapped out should be the one which has been in memory the longest
+        //the process that's been in memory longest will be the one with the smallest/lowest id
+    //note a process can be swapped out no more than 3 times (after that assume the process has been run to completion)
     //once it's swapped out, it goes to the end of the queue of processes waiting to be loaded into memory
 
 
@@ -44,7 +46,7 @@ char memory[128] = {'\0'}; //empty
  * @param p Process node being inserted in Process list
  * @param p_head start of the Process list (ptr to ptr to modify p_head outside of func)
  */
-void add_to_list(Process *p, Process **p_head) {
+void add_to_queue(Process *p, Process **p_head) {
     Process *itr; //temp
 
     if (*p_head == NULL) { //start of the list
@@ -62,6 +64,7 @@ void add_to_list(Process *p, Process **p_head) {
  * initialize new Process node given its id and size parsed from line in file
  * @param id process id
  * @param size process size
+ * @return new Process node
  */ 
 Process *create_process(char id[2], int size) {
     Process *p = malloc(sizeof(Process));
@@ -96,7 +99,7 @@ void parse_line(char line[10], Process **p_head) {
     p_size = atoi(token);
 
     new_process = create_process(p_id, p_size);
-    add_to_list(new_process, p_head);
+    add_to_queue(new_process, p_head);
 }
 
 
@@ -104,21 +107,76 @@ void parse_line(char line[10], Process **p_head) {
  * parse file 
  * @param filename name of file from command line 
  * @param p_head Process list head (first node in Process list)
- * @return boolean representing whether file could be parsed
+ * @return int representing whether file could be parsed (0 if not)
  */
-bool parse_file(char *filename, Process **p_head) {
-    FILE *fptr = fopen(filename, "r");
-    if (!fptr) return false;
-
+int parse_file(char *filename, Process **p_head) {
+    FILE *fptr;
     char line[10] = {'\0'};
+
+    fptr = fopen(filename, "r");
+    if (!fptr) return 0; //file parsing unsuccessful
 
     //read a line until EOF reached
     while (fgets(line, 10, fptr) != NULL) {
         parse_line(line, p_head);
+        queue_len++;
     }
 
-    // reads text until newline is encountered
-    // fscanf(fptr, "%[^\n]", c);
+    return 1;
+}
+
+
+/**
+ * remove process from wait queue before storing in memory
+ * @param p_head Process list head (first node in Process list) - will be changed once process is removed.
+ * NOTE:    alter parts of the head pointer (e.g. size): use p_head 
+ *          alter the head pointer itself: use *p_head
+ */
+void remove_from_queue(Process **p_head) {
+    Process *temp = *p_head;
+
+    //move head ptr to the next node
+    if ((*p_head)->next != NULL) {
+        *p_head = (*p_head)->next;
+    } else { //no more items will be in list after head node is freed
+        free(*p_head);
+        *p_head = NULL;
+    }
+
+    free(temp);
+}
+
+
+/**
+ * "add" one process into memory 
+ * and remove it from the Process list (queue)
+ * @param p_head Process list head (first node in Process list)
+ * @return int representing whether process could be added into memory. 
+ * if not, use algo to fill most holes possible.
+ */
+int add_to_memory(Process **p_head) {
+    if (*p_head == NULL) return 0; //no more processes in wait queue
+
+    //load process that arrived earliest in queue into memory
+    for (int i = 0; i < (*p_head)->size; i++) memory[i] = (*p_head)->id[0];
+    //remove process from queue
+    remove_from_queue(p_head);
+    queue_len--;
+
+    return 1;
+}
+
+
+/**
+ * first fit algorithm for filling processes into holes in memory
+ * @param p_head Process list head (first node in Process list)
+ */
+void firstFit(Process **p_head) {
+    /*
+    loop until no more proccesses waiting to be loaded into memory and/or 
+    no more processes could be added to memory without swapping others out
+    */
+    while (queue_len > 0 && (add_to_memory(p_head))) {}
 
 }
 
@@ -132,17 +190,20 @@ int main(int argc, char *argv[]) {
 
     char filename[200] = {'\0'}; 
     char algo[10] = {'\0'};
-    Process *p_head = NULL;
+    Process *p_head = NULL; //head of Process list containing all processes from file
 
     //parse filename and allocation strategy
     strcpy(filename, argv[1]);
     strcpy(algo, argv[2]);
 
-    //parse file
+    //parse file and add processes to queue
     if (!parse_file(filename, &p_head)) {
         printf("File parsing failed.\n");
         return -1;
     }
+
+    //load processes into memory
+    if (strcmp(algo, "first") == 0) firstFit(&p_head);
 
     return 0;
 }
