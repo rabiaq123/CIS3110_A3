@@ -12,7 +12,7 @@
 # $@ is the name of the target
 
 CC = gcc
-CFLAGS = -Wpedantic -std=gnu99
+CFLAGS = -Wpedantic -std=gnu99 -g
 
 holes: holes.o
 	$(CC) $(CFLAGS) $^ -o $@
