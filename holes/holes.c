@@ -22,29 +22,30 @@ typedef struct Process {
     struct Process *next;
 } Process;
 
+Process *mem_list = NULL;
 char memory[128] = {'\0'}; //memory is initially empty
-int queue_len = 0; //length of Process list (queue)
-
-
-//parse file - parse each line (one process) to get the process ID and its size
-//store each line in one Process struct
-//once one line has been parsed, add Process node to list of Processes
-    //if Process list has not been defined, create new list
-//have mem array be empty (use '-' or '\0' to denote) 
-//load one process at a time in the order they were given in the file into memory, store in array by id
-    //remove the process from the Process list when the process is loaded into memory, as the list represents the queue
-//if no space to store in memory, swap a process out of memory until you have enough space
-    //the first process to be swapped out should be the one which has been in memory the longest
-        //the process that's been in memory longest will be the one with the smallest/lowest id
-    //note a process can be swapped out no more than 3 times (after that assume the process has been run to completion)
-    //once it's swapped out, it goes to the end of the queue of processes waiting to be loaded into memory
 
 
 /**
- * add current process to Process list given head node of process.
- * Note: modifying the ptr itself requires a double ptr, while modifying something the ptr is pointing to doesn't.
+ * remove process from wait queue before storing in memory
+ * @param p_head head in queue (first node in Process list) - will be changed once process is removed.
+ * @return Process node to be removed from queue; should be freed by calling method if applicable
+ */
+Process *remove_from_queue(Process **p_head) {
+    Process *temp = *p_head;
+
+    //move head ptr to the next node... if no next node exists, list head = NULL
+    *p_head = (*p_head)->next;
+
+    temp->next = NULL;
+    return temp;
+}
+
+
+/**
+ * insert current process to back of Process list given head node of process.
  * @param p Process node being inserted in Process list
- * @param p_head start of the Process list (ptr to ptr to modify p_head outside of func)
+ * @param p_head head in queue (ptr to ptr to modify p_head outside of func)
  */
 void add_to_queue(Process *p, Process **p_head) {
     Process *itr; //temp
@@ -81,7 +82,7 @@ Process *create_process(char id[2], int size) {
 /**
  * parse one line in the file into Process node and add node to list of Processes
  * @param line string representing line from file
- * @param p_head start of the Process list (ptr to ptr to modify p_head outside of func)
+ * @param p_head head in queue (ptr to ptr to modify p_head outside of func)
  */
 void parse_line(char line[10], Process **p_head) {
     char p_id[2] = {'\0'};
@@ -92,21 +93,25 @@ void parse_line(char line[10], Process **p_head) {
 
     //parse process id
     strcpy(line_buffer, line);
+
+
     token = strtok(line_buffer, " "); //split input into tokens separated by spaces
     strcpy(p_id, token);
     //parse process size
     token = strtok(NULL, " "); //parse remainder of line
-    p_size = atoi(token);
-
-    new_process = create_process(p_id, p_size);
-    add_to_queue(new_process, p_head);
+    if (token != NULL) {
+//        printf("->%s<-\n", token);
+        p_size = atoi(token);
+        new_process = create_process(p_id, p_size);
+        add_to_queue(new_process, p_head);
+    }
 }
 
 
 /**
  * parse file 
  * @param filename name of file from command line 
- * @param p_head Process list head (first node in Process list)
+ * @param p_head head in queue (first node in Process list)
  * @return int representing whether file could be parsed (0 if not)
  */
 int parse_file(char *filename, Process **p_head) {
@@ -119,7 +124,6 @@ int parse_file(char *filename, Process **p_head) {
     //read a line until EOF reached
     while (fgets(line, 10, fptr) != NULL) {
         parse_line(line, p_head);
-        queue_len++;
     }
 
     return 1;
@@ -127,57 +131,173 @@ int parse_file(char *filename, Process **p_head) {
 
 
 /**
- * remove process from wait queue before storing in memory
- * @param p_head Process list head (first node in Process list) - will be changed once process is removed.
- * NOTE:    alter parts of the head pointer (e.g. size): use p_head 
- *          alter the head pointer itself: use *p_head
+ * remove process from memory list
+ * @return Process node to be removed from memory; should be freed by calling method if applicable
  */
-void remove_from_queue(Process **p_head) {
-    Process *temp = *p_head;
+Process *remove_from_mem_list() {
+    Process *temp = mem_list;
 
-    //move head ptr to the next node
-    if ((*p_head)->next != NULL) {
-        *p_head = (*p_head)->next;
-    } else { //no more items will be in list after head node is freed
-        free(*p_head);
-        *p_head = NULL;
-    }
+    //move head ptr to the next node... if no next node exists, list head = NULL
+    mem_list = mem_list->next;
 
-    free(temp);
+    return temp;
 }
 
 
 /**
- * "add" one process into memory 
- * and remove it from the Process list (queue)
- * @param p_head Process list head (first node in Process list)
+ * insert current process to back of memory list.
+ * @param p Process node being loaded into memory
+ */
+void add_to_mem_list(Process *p) {
+    Process *itr;
+
+    if (mem_list == NULL) { //start of the list
+        mem_list = p;
+        return;
+    }
+
+    itr = mem_list;
+    while (itr->next != NULL) itr = itr->next;
+    if (itr->next == NULL) itr->next = p;
+}
+
+
+/**
+ * retrieve last node in mem list
+ * @return process id of the recently added process
+ */
+char get_pid() {
+    Process *itr;
+
+    if (mem_list == NULL) { //start of the list
+        return '\0';
+    }
+
+    itr = mem_list;
+    while (itr->next != NULL) {
+        itr = itr->next;
+    }
+
+    return itr->id[0];
+}
+
+
+/**
+ * "add" process that arrived earliest in queue into memory 
+ * and remove it from the queue
+ * @param p_head head in queue (first node in Process list)
  * @return int representing whether process could be added into memory. 
- * if not, use algo to fill most holes possible.
+ * if not (return value 0), use algo to fill most holes possible.
  */
 int add_to_memory(Process **p_head) {
     if (*p_head == NULL) return 0; //no more processes in wait queue
+    
+    int start = 0, hole_size = 0;
+    Process *p;
 
-    //load process that arrived earliest in queue into memory
-    for (int i = 0; i < (*p_head)->size; i++) memory[i] = (*p_head)->id[0];
-    //remove process from queue
-    remove_from_queue(p_head);
-    queue_len--;
+    int hole_found = 0; //represents whether hole is found
+    for (int i = 0; i < 128; i++) {
+        //look for hole in memory
+        if (memory[i] == '\0') {
+            start = i; 
+            hole_found = 1;
+        }
+        //attempt to fill hole with process
+        if (hole_found) {
+            hole_size = 127 - start;
+            if (hole_size >= (*p_head)->size) {
+                //load process that arrived earliest in queue into memory
+                for (int j = 0; j < (*p_head)->size; j++) {
+                    memory[start++] = (*p_head)->id[0];
+                }
+                //remove process from queue
+                p = remove_from_queue(p_head);
+                add_to_mem_list(p);
+                return 1;
+            }
+        }
+    }
 
-    return 1;
+    return -1; //proccesses in wait queue but no hole large enough to fit them
+}
+
+
+/**
+ * swap process out of memory and load into queue
+ * @param p_head head in queue (first node in Process list)
+ */
+void swap_out(Process **p_head) {
+    Process *p;
+
+    p = remove_from_mem_list();
+    p->times_swapped++;
+    if (p->times_swapped < 3) { 
+        add_to_queue(p, p_head);
+    } else { //assume process has been run to completion
+        free(p);
+    }
+}
+
+
+int get_mem_usage() {
+    int in_use = 0;
+
+    for (int a = 0; a < 128; a++) {
+        if (memory[a] != '\0') in_use++;
+    }
+
+    return in_use;
+}
+
+
+int get_num_holes() {
+    int flag = 1;
+    int num_holes = 0;
+
+    for (int i = 0; i < 128; i++) {
+        if (flag) {
+            if (memory[i] == '\0') flag = 0;
+        } else if (memory[i] != '\0') {
+            flag = 1;
+            num_holes++;
+        }
+    }
+    if (flag == 0) num_holes++;
+    return num_holes;
 }
 
 
 /**
  * first fit algorithm for filling processes into holes in memory
- * @param p_head Process list head (first node in Process list)
+ * @param p_head head in queue (first node in Process list)
  */
 void firstFit(Process **p_head) {
+    int num_p_loads = 0; //num processes loaded in memory
+    int p_loaded = 0;
+    char p_id = '\0';
+    int num_holes = 0;
+    float cur_mem_usage = 0, total_mem_usage = 0;
+
+//    printf("starting first fit\n");
+
     /*
-    loop until no more proccesses waiting to be loaded into memory and/or 
+    loop until all processes are loaded in memory and/or 
     no more processes could be added to memory without swapping others out
     */
-    while (queue_len > 0 && (add_to_memory(p_head))) {}
+    p_loaded = add_to_memory(p_head);
+    while (p_loaded != 0) {
+//        printf("add to memory\n");
+        num_p_loads++;
+        if (p_loaded == -1) swap_out(p_head); //swap a process out of memory
+        p_id = get_pid();
+        num_holes = get_num_holes();
+        cur_mem_usage = (get_mem_usage()/128.0f) * 100;
+        total_mem_usage += (float)get_mem_usage(memory) / 128.0f;
 
+        printf("%c loaded, #processes = %d, #holes = %d, %%memusage = %f, cumulative %%mem = %f\n",
+        p_id, num_p_loads, num_holes, cur_mem_usage, total_mem_usage);
+        p_loaded = add_to_memory(p_head);
+    }
 }
 
 
