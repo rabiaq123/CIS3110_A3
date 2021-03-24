@@ -135,13 +135,15 @@ int parse_file(char *filename, Process **p_head) {
  * @return Process node to be removed from memory; should be freed by calling method if applicable
  */
 Process *remove_from_mem_list() {
+    if (mem_list == NULL) return NULL;
+
     Process *temp = mem_list;
 
     /*
     move head ptr to the next node... if no next node exists, list head = NULL
     we don't need a loop as we don't need to traverse to the end of the list
     */
-    if (mem_list != NULL) mem_list = mem_list->next;
+    mem_list = mem_list->next;
 
     temp->next = NULL; //ensure node is not still connected to the next memory list node
     return temp;
@@ -191,28 +193,30 @@ char get_pid() {
  */
 int add_to_memory(Process **p_head) {
     if (*p_head == NULL) return 0; //no more processes in wait queue to add to memory
-    
-    int start = 0, hole_size = 0;
+
+    int start = 0, end = 0, counter = 0, hole_size = 0;
     Process *p;
 
-    int hole_found = 0;
     //iterate through memory to find holes
     for (int i = 0; i < 128; i++) {
         //look for hole in memory
         if (memory[i] == '\0') {
-            start = i; 
-            hole_found = 1;
+        //    counter++;
+        //    if (counter == 1) start = i;
+        //    end = i;
+            hole_size++;
+            if (hole_size == 1) start = i;
         }
+        // hole_size = end-start;
         //attempt to fill hole with process
-        if (hole_found) {
-            hole_size = 127 - start;
+        if (hole_size != 0) {
             if (hole_size >= (*p_head)->size) {
-                //load process that arrived earliest in queue into memory
-                for (int j = 0; j < (*p_head)->size; j++) {
-                    memory[start++] = (*p_head)->id[0];
-                }
                 //remove process from queue
                 p = remove_from_queue(p_head);
+                //load process that arrived earliest in queue into memory
+                for (int j = 0; j < p->size; j++) {
+                    memory[start++] = p->id[0];
+                }
                 add_to_mem_list(p);
                 return 1;
             }
@@ -227,7 +231,7 @@ int add_to_memory(Process **p_head) {
  * remove contents of swapped out process from memory
  * @param p process to be swapped out
  */
-void update_mem_array(Process *p) {
+void remove_from_mem_array(Process *p) {
     int i = 0;
     while (memory[i++] != p->id[0]) {} //iterate until memory[i] = id of process to be swapped out
     --i;
@@ -243,16 +247,20 @@ void swap_out(Process **p_head) {
     Process *p;
 
     p = remove_from_mem_list();
-    update_mem_array(p); //set corresponding mem array elements to '\0'
+    remove_from_mem_array(p); //set corresponding mem array elements to '\0'
     p->times_swapped++;
     if (p->times_swapped < 3) { 
         add_to_queue(p, p_head);
     } else { //assume process has been run to completion
         free(p);
+        p = NULL;
     }
 }
 
-
+/**
+ * get num array elements in use by processes in memory
+ * @return num occupied elements in memory array
+ */
 int get_mem_usage() {
     int in_use = 0;
 
@@ -264,6 +272,10 @@ int get_mem_usage() {
 }
 
 
+/**
+ * get number of holes in memory array
+ * @return num holes in memory
+ */
 int get_num_holes() {
     int flag = 1;
     int num_holes = 0;
@@ -282,14 +294,67 @@ int get_num_holes() {
 
 
 /**
+ * get number of processes stored in memory array
+ * @return num processes in memory
+ */
+int get_num_procs() {
+    int diff_proc = 0;
+    char id1, id2;
+    int num_procs = 0;
+
+    if (mem_list != NULL) {
+        num_procs = 1; //there is at least one process in memory
+        Process *itr = mem_list;
+        while (itr->next != NULL) {
+            num_procs++;
+            itr = itr->next;
+        }
+    }
+
+    return num_procs;
+}
+
+
+void print_mem_list() {
+    Process *itr = mem_list;
+    int line_split = 0, i = 0;
+
+    printf("mem list (traversing from top to bottom):\n");
+    if (itr == NULL) {
+        printf("EMPTY!!!\n");
+        return;
+    }
+    while (itr->next != NULL) {
+        line_split++;
+        if (itr->id[0] != '\0') printf("%d. %c ", ++i, itr->id[0]);
+        else printf("%d. 0 ", ++i);
+        if (line_split % 4 == 0) printf("\n");
+        itr = itr->next;
+    }
+    printf("\n");
+}
+
+
+void print_memory() {
+    printf("memory array (traversing from start to end):\n");
+    for (int i = 0; i < 128; i++) {
+        if (memory[i] != '\0') printf("%d. %c ", i+1, memory[i]);
+        else printf("%d. 0 ", i+1);
+        if (i % 4 == 0) printf("\n");
+    }
+    printf("\n");
+}
+
+
+/**
  * first fit algorithm for filling processes into holes in memory
  * @param p_head head in queue (first node in Process list)
  */
 void firstFit(Process **p_head) {
-    int num_p_loads = 0; //num processes loaded in memory
     int p_loaded = 0; //acts as a boolean
+    int num_p_loads = 0; //num times processes were loaded into memory
     char p_id = '\0';
-    int num_holes = 0;
+    int num_holes = 0, num_procs = 0; //in memory
     float cur_usage = 0, total_usage = 0; //memory usage
 
     /*
@@ -297,17 +362,29 @@ void firstFit(Process **p_head) {
     no more processes could be added to memory without swapping others out
     */
     p_loaded = add_to_memory(p_head);
-//    while (p_loaded != 0) {
-    for (int i = 0; i < 4; i++) {
+    while (p_loaded != 0) {
         num_p_loads++;
-        if (p_loaded == -1) swap_out(p_head); //swap a process out of memory
+        while (p_loaded == -1) {
+            swap_out(p_head); //swap a process out of memory and into queue
+            p_loaded = add_to_memory(p_head); //load first process in queue (that could not be loaded initially) into memory
+//            continue;
+            // printf("pid: %d\n", p_loaded);
+            // print_mem_list();
+            // print_memory();
+        }
+
+        // printf("pid: %d\n", p_loaded);
+        // print_mem_list();
+        // print_memory();
+        
         p_id = get_pid();
         num_holes = get_num_holes();
+        num_procs = get_num_procs();
         cur_usage = (get_mem_usage()/128.0f) * 100;
         total_usage += (get_mem_usage()/128.0f) * 100;
 
         printf("%c loaded, #processes = %d, #holes = %d, %%memusage = %.1f, cumulative %%mem = %.1f\n",
-            p_id, num_p_loads, num_holes, (cur_usage), (total_usage/num_p_loads));
+                p_id, num_procs, num_holes, (cur_usage), (total_usage/num_p_loads));
         p_loaded = add_to_memory(p_head);
     }
 }
