@@ -185,6 +185,18 @@ char get_pid() {
 
 
 /**
+ * update memory array  by adding new process id to it
+ * @param p new process being added to memory
+ * @param idx start index of the hole
+ */
+void add_to_mem_array(Process *p, int idx) {
+    for (int j = 0; j < p->size; j++) {
+        memory[idx++] = p->id[0];
+    }
+}
+
+
+/**
  * "add" process that arrived earliest in queue into memory 
  * and remove it from the queue
  * @param p_head head in queue (first node in Process list)
@@ -194,33 +206,33 @@ char get_pid() {
 int add_to_memory(Process **p_head) {
     if (*p_head == NULL) return 0; //no more processes in wait queue to add to memory
 
-    int start = 0, end = 0, counter = 0, hole_size = 0;
+    int start = 0, hole_size = 0;
+    int hole = 1, hole_idx = 0;
     Process *p;
 
     //iterate through memory to find holes
     for (int i = 0; i < 128; i++) {
         //look for hole in memory
-        if (memory[i] == '\0') {
-        //    counter++;
-        //    if (counter == 1) start = i;
-        //    end = i;
+        hole = 0;
+        hole_size = 0;
+        hole_idx = i;
+        while (memory[hole_idx] == '\0' && hole_idx < 128) { //loop until end of hole or end of memory space reached
+            hole = 1;
             hole_size++;
             if (hole_size == 1) start = i;
+            hole_idx++;
         }
-        // hole_size = end-start;
         //attempt to fill hole with process
-        if (hole_size != 0) {
+        if (hole) {
             if (hole_size >= (*p_head)->size) {
                 //remove process from queue
                 p = remove_from_queue(p_head);
                 //load process that arrived earliest in queue into memory
-                for (int j = 0; j < p->size; j++) {
-                    memory[start++] = p->id[0];
-                }
+                add_to_mem_array(p, start);
                 add_to_mem_list(p);
                 return 1;
             }
-        }
+        } 
     }
 
     return -1; //proccesses in wait queue but no hole large enough to fit them
@@ -277,18 +289,19 @@ int get_mem_usage() {
  * @return num holes in memory
  */
 int get_num_holes() {
-    int flag = 1;
+    int no_hole = 1; //if set to 1, no hole present
     int num_holes = 0;
 
     for (int i = 0; i < 128; i++) {
-        if (flag) {
-            if (memory[i] == '\0') flag = 0;
+        if (no_hole) {
+            if (memory[i] == '\0') no_hole = 0;
         } else if (memory[i] != '\0') {
-            flag = 1;
+            no_hole = 1;
             num_holes++;
         }
     }
-    if (flag == 0) num_holes++;
+    if (no_hole == 0) num_holes++;
+
     return num_holes;
 }
 
@@ -367,7 +380,6 @@ void firstFit(Process **p_head) {
         while (p_loaded == -1) {
             swap_out(p_head); //swap a process out of memory and into queue
             p_loaded = add_to_memory(p_head); //load first process in queue (that could not be loaded initially) into memory
-//            continue;
             // printf("pid: %d\n", p_loaded);
             // print_mem_list();
             // print_memory();
