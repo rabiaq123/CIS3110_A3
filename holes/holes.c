@@ -94,10 +94,9 @@ void parse_line(char line[10], Process **p_head) {
 
     //parse process id
     strcpy(line_buffer, line);
-
-
     token = strtok(line_buffer, " "); //split input into tokens separated by spaces
     strcpy(p_id, token);
+
     //parse process size
     token = strtok(NULL, " "); //parse remainder of line
     if (token != NULL) {
@@ -173,9 +172,9 @@ void add_to_mem_list(Process *p) {
  * @return process id of the recently added process
  */
 char get_pid() {
-    Process *itr;
-
     if (mem_list == NULL) return '\0'; //start of the list
+   
+    Process *itr;
 
     itr = mem_list;
     while (itr->next != NULL) itr = itr->next;
@@ -197,17 +196,17 @@ void add_to_mem_array(Process *p, int idx) {
 
 
 /**
- * "add" process that arrived earliest in queue into memory 
- * and remove it from the queue
+ * "load" process that arrived earliest in queue into memory and remove it from the queue
+ * using the first fit algorithm
  * @param p_head head in queue (first node in Process list)
  * @return int representing whether process could be added into memory. 
  * if not (return value 0), use algo to fill most holes possible.
  */
-int add_to_memory(Process **p_head) {
+int add_FF(Process **p_head) {
     if (*p_head == NULL) return 0; //no more processes in wait queue to add to memory
 
-    int start = 0, hole_size = 0;
-    int hole = 1, hole_idx = 0;
+    int hole = 1;
+    int start = 0, hole_size = 0, idx = 0; //load into first hole large enough to fit process
     Process *p;
 
     //iterate through memory to find holes
@@ -215,12 +214,12 @@ int add_to_memory(Process **p_head) {
         //look for hole in memory
         hole = 0;
         hole_size = 0;
-        hole_idx = i;
-        while (memory[hole_idx] == '\0' && hole_idx < 128) { //loop until end of hole or end of memory space reached
+        idx = i;
+        while (memory[idx] == '\0' && idx < 128) { //loop until end of hole or end of memory space reached
             hole = 1;
             hole_size++;
             if (hole_size == 1) start = i;
-            hole_idx++;
+            idx++;
         }
         //attempt to fill hole with process
         if (hole) {
@@ -247,7 +246,7 @@ void remove_from_mem_array(Process *p) {
     int i = 0;
     while (memory[i++] != p->id[0]) {} //iterate until memory[i] = id of process to be swapped out
     --i;
-    while (memory[i] == p->id[0]) memory[i++] = '\0';
+    while (memory[i] == p->id[0]) memory[i++] = '\0'; //set hole created by swapped out process to '\0'
 }
 
 
@@ -268,6 +267,7 @@ void swap_out(Process **p_head) {
         p = NULL;
     }
 }
+
 
 /**
  * get num array elements in use by processes in memory
@@ -328,78 +328,244 @@ int get_num_procs() {
 }
 
 
-void print_mem_list() {
-    Process *itr = mem_list;
-    int line_split = 0, i = 0;
-
-    printf("mem list (traversing from top to bottom):\n");
-    if (itr == NULL) {
-        printf("EMPTY!!!\n");
-        return;
-    }
-    while (itr->next != NULL) {
-        line_split++;
-        if (itr->id[0] != '\0') printf("%d. %c ", ++i, itr->id[0]);
-        else printf("%d. 0 ", ++i);
-        if (line_split % 4 == 0) printf("\n");
-        itr = itr->next;
-    }
-    printf("\n");
-}
-
-
-void print_memory() {
-    printf("memory array (traversing from start to end):\n");
-    for (int i = 0; i < 128; i++) {
-        if (memory[i] != '\0') printf("%d. %c ", i+1, memory[i]);
-        else printf("%d. 0 ", i+1);
-        if (i % 4 == 0) printf("\n");
-    }
-    printf("\n");
-}
-
-
 /**
  * first fit algorithm for filling processes into holes in memory
  * @param p_head head in queue (first node in Process list)
  */
-void firstFit(Process **p_head) {
+void first_fit(Process **p_head) {
     int p_loaded = 0; //acts as a boolean
     int num_p_loads = 0; //num times processes were loaded into memory
     char p_id = '\0';
     int num_holes = 0, num_procs = 0; //in memory
     float cur_usage = 0, total_usage = 0; //memory usage
+    float avg_procs = 0, avg_holes = 0;
 
     /*
     loop until all processes are loaded in memory and/or 
     no more processes could be added to memory without swapping others out
     */
-    p_loaded = add_to_memory(p_head);
+    p_loaded = add_FF(p_head);
     while (p_loaded != 0) {
         num_p_loads++;
         while (p_loaded == -1) {
             swap_out(p_head); //swap a process out of memory and into queue
-            p_loaded = add_to_memory(p_head); //load first process in queue (that could not be loaded initially) into memory
-            // printf("pid: %d\n", p_loaded);
-            // print_mem_list();
-            // print_memory();
+            p_loaded = add_FF(p_head); //load first process in queue (that could not be loaded initially) into memory
         }
 
-        // printf("pid: %d\n", p_loaded);
-        // print_mem_list();
-        // print_memory();
-        
-        p_id = get_pid();
-        num_holes = get_num_holes();
-        num_procs = get_num_procs();
+        /*
+        display info of current process being loaded into memory
+        i.e. num processes and holes in memory at the moment, the memory usage, and 
+        cumulative memory usage throughout the swapping and inserting process.
+        */
+        avg_holes += get_num_holes();
+        avg_procs += get_num_procs();
         cur_usage = (get_mem_usage()/128.0f) * 100;
         total_usage += (get_mem_usage()/128.0f) * 100;
 
-        printf("%c loaded, #processes = %d, #holes = %d, %%memusage = %.1f, cumulative %%mem = %.1f\n",
-                p_id, num_procs, num_holes, (cur_usage), (total_usage/num_p_loads));
-        p_loaded = add_to_memory(p_head);
+        printf("%c loaded, #processes = %d, #holes = %d, %%memusage = %.0f, cumulative %%mem = %.0f\n",
+                get_pid(), get_num_procs(), get_num_holes(), cur_usage, (total_usage/num_p_loads));
+        
+        //attempt to load next process in queue into memory
+        p_loaded = add_FF(p_head);
     }
+
+    printf("Total loads = %d, average #processes = %.2f, average #holes = %.1f, cumulative %%mem = %.0f\n",
+            num_p_loads, (avg_procs/num_p_loads), (avg_holes/num_p_loads), (total_usage/num_p_loads));
 }
+
+
+/**
+ * "load" process that arrived earliest in queue into memory and remove it from the queue
+ * using the worst fit algorithm
+ * @param p_head head in queue (first node in Process list)
+ * @return int representing whether process could be added into memory. 
+ * if not (return value 0), use algo to fill most holes possible.
+ */
+int add_WF(Process **p_head) {
+    if (*p_head == NULL) return 0; //no more processes in wait queue to add to memory
+
+    int hole = 1;
+    int start = 0, hole_size = 0, idx = 0;
+    int largest_hole_size = 0, largest_hole_idx = 0; //load into the largest holes in memory
+    Process *p;
+
+    //iterate through memory to find holes
+    for (int i = 0; i < 128; i++) {
+        //look for hole in memory
+        hole = 0;
+        hole_size = 0;
+        idx = i;
+        while (memory[idx] == '\0' && idx < 128) { //loop until end of hole or end of memory space reached
+            hole = 1;
+            hole_size++;
+            if (hole_size == 1) start = i;
+            idx++;
+        }
+
+        //if larger hole was found, save size and start index of hole
+        if (hole && hole_size > largest_hole_size) {
+            largest_hole_size = hole_size;
+            largest_hole_idx = start;
+        }
+    }
+
+    //attempt to fill hole with process
+    if (largest_hole_size >= (*p_head)->size) {
+        //remove process from queue
+        p = remove_from_queue(p_head);
+        //load process that arrived earliest in queue into memory
+        add_to_mem_array(p, largest_hole_idx);
+        add_to_mem_list(p);
+        return 1;
+    }
+
+    return -1; //proccesses in wait queue but no hole large enough to fit them
+}
+
+
+/**
+ * worst fit algorithm for filling processes into holes in memory
+ * @param p_head head in queue (first node in Process list)
+ */
+void worst_fit(Process **p_head) {
+    int p_loaded = 0; //acts as a boolean
+    int num_p_loads = 0; //num times processes were loaded into memory
+    char p_id = '\0';
+    int num_holes = 0, num_procs = 0; //in memory
+    float cur_usage = 0, total_usage = 0; //memory usage
+    float avg_procs = 0, avg_holes = 0;
+
+    /*
+    loop until all processes are loaded in memory and/or 
+    no more processes could be added to memory without swapping others out
+    */
+    p_loaded = add_WF(p_head);
+    while (p_loaded != 0) {
+        num_p_loads++;
+        while (p_loaded == -1) {
+            swap_out(p_head); //swap a process out of memory and into queue
+            p_loaded = add_WF(p_head); //load first process in queue (that could not be loaded initially) into memory
+        }
+
+        /*
+        display info of current process being loaded into memory
+        i.e. num processes and holes in memory at the moment, the memory usage, and 
+        cumulative memory usage throughout the swapping and inserting process.
+        */
+        avg_holes += get_num_holes();
+        avg_procs += get_num_procs();
+        cur_usage = (get_mem_usage()/128.0f) * 100;
+        total_usage += (get_mem_usage()/128.0f) * 100;
+
+        printf("%c loaded, #processes = %d, #holes = %d, %%memusage = %.0f, cumulative %%mem = %.0f\n",
+                get_pid(), get_num_procs(), get_num_holes(), cur_usage, (total_usage/num_p_loads));
+        
+        //attempt to load next process in queue into memory
+        p_loaded = add_WF(p_head);
+    }
+
+    printf("Total loads = %d, average #processes = %.2f, average #holes = %.1f, cumulative %%mem = %.0f\n",
+            num_p_loads, (avg_procs/num_p_loads), (avg_holes/num_p_loads), (total_usage/num_p_loads));
+}
+
+
+/**
+ * "load" process that arrived earliest in queue into memory and remove it from the queue
+ * using the best fit algorithm
+ * @param p_head head in queue (first node in Process list)
+ * @return int representing whether process could be added into memory. 
+ * if not (return value 0), use algo to fill most holes possible.
+ */
+int add_BF(Process **p_head) {
+    if (*p_head == NULL) return 0; //no more processes in wait queue to add to memory
+
+    int hole = 1, best_found = 0;
+    int start = 0, idx = 0, hole_size = 0;
+    int best_hole_size = 2000, best_hole_idx = 0; //load into holes that most closely match requirements
+    Process *p;
+
+    //iterate through memory to find holes
+    for (int i = 0; i < 128; i++) {
+        //look for hole in memory
+        hole = 0;
+        hole_size = 0;
+        idx = i;
+        while (memory[idx] == '\0' && idx < 128) { //loop until end of hole or end of memory space reached
+            hole = 1;
+            hole_size++;
+            if (hole_size == 1) start = i;
+            idx++;
+        }
+
+        if (hole && hole_size >= (*p_head)->size) {
+            //if smaller hole was found that fits requirements, save size and start index of hole
+            if (hole_size < best_hole_size) {
+                best_found = 1;
+                best_hole_size = hole_size;
+                best_hole_idx = start;
+            }
+        }
+    }
+
+    //load process into memory
+    if (best_found && best_hole_size >= (*p_head)->size) {
+        //remove process from queue
+        p = remove_from_queue(p_head);
+        //load process that arrived earliest in queue into memory
+        add_to_mem_array(p, best_hole_idx);
+        add_to_mem_list(p);
+        return 1;
+    }
+
+    return -1; //proccesses in wait queue but no hole large enough to fit them
+}
+
+
+/**
+ * best fit algorithm for filling processes into holes in memory
+ * @param p_head head in queue (first node in Process list)
+ */
+void best_fit(Process **p_head) {
+    int p_loaded = 0; //acts as a boolean
+    int num_p_loads = 0; //num times processes were loaded into memory
+    char p_id = '\0';
+    int num_holes = 0, num_procs = 0; //in memory
+    float cur_usage = 0, total_usage = 0; //memory usage
+    float avg_procs = 0, avg_holes = 0;
+
+    /*
+    loop until all processes are loaded in memory and/or 
+    no more processes could be added to memory without swapping others out
+    */
+    p_loaded = add_BF(p_head);
+    while (p_loaded != 0) {
+        num_p_loads++;
+        while (p_loaded == -1) {
+            swap_out(p_head); //swap a process out of memory and into queue
+            p_loaded = add_BF(p_head); //load first process in queue (that could not be loaded initially) into memory
+        }
+
+        /*
+        display info of current process being loaded into memory
+        i.e. num processes and holes in memory at the moment, the memory usage, and 
+        cumulative memory usage throughout the swapping and inserting process.
+        */
+        avg_holes += get_num_holes();
+        avg_procs += get_num_procs();
+        cur_usage = (get_mem_usage()/128.0f) * 100;
+        total_usage += (get_mem_usage()/128.0f) * 100;
+
+        printf("%c loaded, #processes = %d, #holes = %d, %%memusage = %.0f, cumulative %%mem = %.0f\n",
+                get_pid(), get_num_procs(), get_num_holes(), cur_usage, (total_usage/num_p_loads));
+        
+        //attempt to load next process in queue into memory
+        p_loaded = add_BF(p_head);
+    }
+
+    printf("Total loads = %d, average #processes = %.2f, average #holes = %.1f, cumulative %%mem = %.0f\n",
+            num_p_loads, (avg_procs/num_p_loads), (avg_holes/num_p_loads), (total_usage/num_p_loads));
+}
+
 
 
 int main(int argc, char *argv[]) {
@@ -424,7 +590,13 @@ int main(int argc, char *argv[]) {
     }
 
     //load processes into memory
-    if (strcmp(algo, "first") == 0) firstFit(&p_head);
+    /* 
+    note that only one of the four options can be selected at once, so other functions unrelated to the
+    algo chosen by the user will not cause undefined behaviour or alter the value of p_head
+    */
+    if (strcmp(algo, "first") == 0) first_fit(&p_head);
+    if (strcmp(algo, "worst") == 0) worst_fit(&p_head);
+    if (strcmp(algo, "best") == 0) best_fit(&p_head);
 
     return 0;
 }
