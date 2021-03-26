@@ -130,6 +130,20 @@ int parse_file(char *filename, Process **p_head) {
 
 
 /**
+ * get last process that was loaded into memory
+ * @return last Process node in memory list
+ */
+Process *get_last_loaded_proc() {
+    if (mem_list == NULL) return NULL;
+
+    Process *itr = mem_list;
+    while (itr->next != NULL) itr = itr->next;
+
+    return itr;
+}
+
+
+/**
  * remove process from memory list
  * @return Process node to be removed from memory; should be freed by calling method if applicable
  */
@@ -161,8 +175,7 @@ void add_to_mem_list(Process *p) {
         return;
     }
 
-    itr = mem_list;
-    while (itr->next != NULL) itr = itr->next;
+    itr = get_last_loaded_proc();
     if (itr->next == NULL) itr->next = p;
 }
 
@@ -173,11 +186,10 @@ void add_to_mem_list(Process *p) {
  */
 char get_pid() {
     if (mem_list == NULL) return '\0'; //start of the list
-   
+
     Process *itr;
 
-    itr = mem_list;
-    while (itr->next != NULL) itr = itr->next;
+    itr = get_last_loaded_proc();
 
     return itr->id[0];
 }
@@ -192,49 +204,6 @@ void add_to_mem_array(Process *p, int idx) {
     for (int j = 0; j < p->size; j++) {
         memory[idx++] = p->id[0];
     }
-}
-
-
-/**
- * "load" process that arrived earliest in queue into memory and remove it from the queue
- * using the first fit algorithm
- * @param p_head head in queue (first node in Process list)
- * @return int representing whether process could be added into memory. 
- * if not (return value 0), use algo to fill most holes possible.
- */
-int add_FF(Process **p_head) {
-    if (*p_head == NULL) return 0; //no more processes in wait queue to add to memory
-
-    int hole = 1;
-    int start = 0, hole_size = 0, idx = 0; //load into first hole large enough to fit process
-    Process *p;
-
-    //iterate through memory to find holes
-    for (int i = 0; i < 128; i++) {
-        //look for hole in memory
-        hole = 0;
-        hole_size = 0;
-        idx = i;
-        while (memory[idx] == '\0' && idx < 128) { //loop until end of hole or end of memory space reached
-            hole = 1;
-            hole_size++;
-            if (hole_size == 1) start = i;
-            idx++;
-        }
-        //attempt to fill hole with process
-        if (hole) {
-            if (hole_size >= (*p_head)->size) {
-                //remove process from queue
-                p = remove_from_queue(p_head);
-                //load process that arrived earliest in queue into memory
-                add_to_mem_array(p, start);
-                add_to_mem_list(p);
-                return 1;
-            }
-        } 
-    }
-
-    return -1; //proccesses in wait queue but no hole large enough to fit them
 }
 
 
@@ -311,8 +280,6 @@ int get_num_holes() {
  * @return num processes in memory
  */
 int get_num_procs() {
-    int diff_proc = 0;
-    char id1, id2;
     int num_procs = 0;
 
     if (mem_list != NULL) {
@@ -329,14 +296,55 @@ int get_num_procs() {
 
 
 /**
+ * "load" process that arrived earliest in queue into memory and remove it from the queue
+ * using the first fit algorithm
+ * @param p_head head in queue (first node in Process list)
+ * @return int representing whether process could be added into memory. 
+ * if not (return value 0), use algo to fill most holes possible.
+ */
+int add_FF(Process **p_head) {
+    if (*p_head == NULL) return 0; //no more processes in wait queue to add to memory
+
+    int hole = 1;
+    int start = 0, hole_size = 0, idx = 0; //load into first hole large enough to fit process
+    Process *p;
+
+    //iterate through memory to find holes
+    for (int i = 0; i < 128; i++) {
+        //look for hole in memory
+        hole = 0;
+        hole_size = 0;
+        idx = i;
+        while (memory[idx] == '\0' && idx < 128) { //loop until end of hole or end of memory space reached
+            hole = 1;
+            hole_size++;
+            if (hole_size == 1) start = i;
+            idx++;
+        }
+        //attempt to fill hole with process
+        if (hole) {
+            if (hole_size >= (*p_head)->size) {
+                //remove process from queue
+                p = remove_from_queue(p_head);
+                //load process that arrived earliest in queue into memory
+                add_to_mem_array(p, start);
+                add_to_mem_list(p);
+                return 1;
+            }
+        } 
+    }
+
+    return -1; //proccesses in wait queue but no hole large enough to fit them
+}
+
+
+/**
  * first fit algorithm for filling processes into holes in memory
  * @param p_head head in queue (first node in Process list)
  */
 void first_fit(Process **p_head) {
     int p_loaded = 0; //acts as a boolean
     int num_p_loads = 0; //num times processes were loaded into memory
-    char p_id = '\0';
-    int num_holes = 0, num_procs = 0; //in memory
     float cur_usage = 0, total_usage = 0; //memory usage
     float avg_procs = 0, avg_holes = 0;
 
@@ -430,8 +438,6 @@ int add_WF(Process **p_head) {
 void worst_fit(Process **p_head) {
     int p_loaded = 0; //acts as a boolean
     int num_p_loads = 0; //num times processes were loaded into memory
-    char p_id = '\0';
-    int num_holes = 0, num_procs = 0; //in memory
     float cur_usage = 0, total_usage = 0; //memory usage
     float avg_procs = 0, avg_holes = 0;
 
@@ -528,8 +534,6 @@ int add_BF(Process **p_head) {
 void best_fit(Process **p_head) {
     int p_loaded = 0; //acts as a boolean
     int num_p_loads = 0; //num times processes were loaded into memory
-    char p_id = '\0';
-    int num_holes = 0, num_procs = 0; //in memory
     float cur_usage = 0, total_usage = 0; //memory usage
     float avg_procs = 0, avg_holes = 0;
 
@@ -567,6 +571,125 @@ void best_fit(Process **p_head) {
 }
 
 
+/**
+ * get start index from which to start looking for a hole that'll be able to fit the next process
+ * waiting to be loaded into memory.
+ * @param last_proc last process that was added in memory
+ * @return last process's end_index + 1
+ */
+int get_NF_start_idx(Process *last_proc) {
+    int end_idx = 0; //index of last element in memory array being occupied by last added process
+    int proc_found = 0;
+
+    for (int i = 0; i < 128; i++) {
+        if (memory[i] == last_proc->id[0]) {
+            end_idx = i;
+        }
+    }
+
+    return (end_idx + 1);
+}
+
+
+/**
+ * "load" process that arrived earliest in queue into memory and remove it from the queue
+ * using the next fit algorithm
+ * @param p_head head in queue (first node in Process list)
+ * @return int representing whether process could be added into memory. 
+ * if not (return value 0), use algo to fill most holes possible.
+ */
+int add_NF(Process **p_head) {
+    if (*p_head == NULL) return 0; //no more processes in wait queue to add to memory
+
+    int hole = 1;
+    int start = 0, hole_size = 0, idx = 0; //load into first hole (after last placement) large enough to fit process
+    Process *last_proc, *p;
+    int i_start = 0;
+    int looped_once = 0;
+
+    //get most recently loaded process from memory
+    last_proc = get_last_loaded_proc();
+    if (last_proc != NULL) i_start = get_NF_start_idx(last_proc);
+
+    //iterate through memory to find holes
+    for (int i = i_start; i != i_start || !looped_once; i++) {
+        /*
+        loop back to the start of memory once end of memory is reached (i=128). 
+        when it loops back, i will be incremented again, making i = 129
+        */
+        if (i >= 128) {
+            i = 0; //set index to start of memory
+            looped_once = 1;
+        }
+        //look for hole in memory
+        hole = 0;
+        hole_size = 0;
+        idx = i;
+        while (memory[idx] == '\0' && idx < 128) { //loop until end of hole or end of memory space reached
+            hole = 1;
+            hole_size++;
+            if (hole_size == 1) start = i;
+            idx++;
+        }
+        //attempt to fill hole with process
+        if (hole && hole_size >= (*p_head)->size) {
+            //remove process from queue
+            p = remove_from_queue(p_head);
+            //load process that arrived earliest in queue into memory
+            add_to_mem_array(p, start);
+            add_to_mem_list(p);
+            return 1;
+        }
+        i = idx; //prevent recounting by setting i to start index of space after hole
+    }
+
+    return -1; //proccesses in wait queue but no hole large enough to fit them
+}
+
+
+/**
+ * next fit algorithm for filling processes into holes in memory
+ * @param p_head head in queue (first node in Process list)
+ */
+void next_fit(Process **p_head) {
+    int p_loaded = 0; //acts as a boolean
+    int num_p_loads = 0; //num times processes were loaded into memory
+    float cur_usage = 0, total_usage = 0; //memory usage
+    float avg_procs = 0, avg_holes = 0;
+
+    /*
+    loop until all processes are loaded in memory and/or 
+    no more processes could be added to memory without swapping others out
+    */
+    p_loaded = add_NF(p_head);
+    while (p_loaded != 0) {
+        num_p_loads++;
+        while (p_loaded == -1) {
+            swap_out(p_head); //swap a process out of memory and into queue
+            p_loaded = add_NF(p_head); //load first process from queue (that could not be loaded initially) into memory
+        }
+
+        /*
+        display info of current process being loaded into memory
+        i.e. num processes and holes in memory at the moment, the memory usage, and 
+        cumulative memory usage throughout the swapping and inserting process.
+        */
+        avg_holes += get_num_holes();
+        avg_procs += get_num_procs();
+        cur_usage = (get_mem_usage()/128.0f) * 100;
+        total_usage += (get_mem_usage()/128.0f) * 100;
+
+        printf("%c loaded, #processes = %d, #holes = %d, %%memusage = %.0f, cumulative %%mem = %.0f\n",
+                get_pid(), get_num_procs(), get_num_holes(), cur_usage, (total_usage/num_p_loads));
+
+        //attempt to load next process in queue into memory
+        p_loaded = add_NF(p_head);
+    }
+
+    printf("Total loads = %d, average #processes = %.2f, average #holes = %.1f, cumulative %%mem = %.0f\n",
+            num_p_loads, (avg_procs/num_p_loads), (avg_holes/num_p_loads), (total_usage/num_p_loads));
+}
+
 
 int main(int argc, char *argv[]) {
     //check for invalid command-line arguments
@@ -597,6 +720,7 @@ int main(int argc, char *argv[]) {
     if (strcmp(algo, "first") == 0) first_fit(&p_head);
     if (strcmp(algo, "worst") == 0) worst_fit(&p_head);
     if (strcmp(algo, "best") == 0) best_fit(&p_head);
+    if (strcmp(algo, "next") == 0) next_fit(&p_head);
 
     return 0;
 }
