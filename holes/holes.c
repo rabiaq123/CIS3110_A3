@@ -511,6 +511,14 @@ int add_BF(Process **p_head) {
                 best_hole_idx = start;
             }
         }
+        /*
+        prevent recounting (and reiterating through) same elements in memory array
+        by setting i to start index of space after hole.
+        this will prevent us from accidentally taking a larger hole in memory
+        and reiterating through it every time, thinking we have a smaller hole size 
+        than we actually do.
+        */
+        i = idx; 
     }
 
     //load process into memory
