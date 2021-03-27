@@ -12,8 +12,6 @@
  */
 
 
-/* DEFINITIONS */
-
 //info related to philosopher
 typedef struct Philosopher {
 	int id;
@@ -33,8 +31,9 @@ phil **phil_list;
 chopstick **cs_list;
 
 
-/* FUNCTIONS */
-
+/**
+ * start routine for pthread_create() method
+ */
 void *dine(void *num) {
     int phil_id = *(int *)num;
     int right_cs, left_cs;

@@ -726,9 +726,10 @@ int main(int argc, char *argv[]) {
     algo chosen by the user will not cause undefined behaviour or alter the value of p_head
     */
     if (strcmp(algo, "first") == 0) first_fit(&p_head);
-    if (strcmp(algo, "worst") == 0) worst_fit(&p_head);
-    if (strcmp(algo, "best") == 0) best_fit(&p_head);
-    if (strcmp(algo, "next") == 0) next_fit(&p_head);
+    else if (strcmp(algo, "worst") == 0) worst_fit(&p_head);
+    else if (strcmp(algo, "best") == 0) best_fit(&p_head);
+    else if (strcmp(algo, "next") == 0) next_fit(&p_head);
+    else printf("Choose one of 'first', 'worst', 'best', and 'next' as the allocation strategy.\n");
 
     return 0;
 }
