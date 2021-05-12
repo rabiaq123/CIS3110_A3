@@ -22,5 +22,3 @@ This assignment contains two separate programs:
 
 ## Statement of Individual Work
 By the action of submitting this work for grading, I certify that this assignment is my own work, based on my personal study. I also certify that no parts of this assignment have previously been submitted for assessment in any other course, except where specific permission has been granted.
-
-
